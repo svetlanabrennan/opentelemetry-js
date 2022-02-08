@@ -37,7 +37,7 @@ export abstract class OTLPExporterBase<
   protected _concurrencyLimit: number;
   protected _sendingPromises: Promise<unknown>[] = [];
   protected _shutdownOnce: BindOnceFuture<void>;
-  private readonly _timeoutMillis: number;
+  public readonly _timeoutMillis: number;
 
   /**
    * @param config

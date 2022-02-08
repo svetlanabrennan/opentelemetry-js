@@ -20,7 +20,7 @@ import {
   propagation,
   TextMapPropagator,
   trace,
-  TracerOptions,
+  // TracerOptions,
   TracerProvider,
 } from '@opentelemetry/api';
 import {
@@ -90,11 +90,13 @@ export class BasicTracerProvider implements TracerProvider {
       this.activeSpanProcessor = new NoopSpanProcessor();
     }
   }
-
-  getTracer(name: string, version?: string, options?: TracerOptions): Tracer {
-    const key = `${name}@${version || ''}:${options?.schemaUrl || ''}`;
+  getTracer(name: string, version?: string): Tracer {
+  // getTracer(name: string, version?: string, options?: TracerOptions): Tracer {
+    // const key = `${name}@${version || ''}:${options?.schemaUrl || ''}`;
+    const key = `${name}@${version || ''}`;
     if (!this._tracers.has(key)) {
-      this._tracers.set(key, new Tracer({ name, version, schemaUrl: options?.schemaUrl }, this._config, this));
+      this._tracers.set(key, new Tracer({ name, version }, this._config, this));
+      // this._tracers.set(key, new Tracer({ name, version, schemaUrl: options?.schemaUrl }, this._config, this));
     }
 
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion

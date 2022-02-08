@@ -220,12 +220,16 @@ describe('OTLPTraceExporter - node with json over http', () => {
       });
 
       collectorExporter.export(spans, () => { });
+      done();
     });
 
-    it('should log the successful message', done => {
+    it('should log the successful message', function done() {
       // Need to stub/spy on the underlying logger as the "diag" instance is global
+      this.timeout(collectorExporter._timeoutMillis);
       const stubLoggerError = sinon.stub(diag, 'error');
       const responseSpy = sinon.spy();
+
+      const clock = sinon.useFakeTimers();
       collectorExporter.export(spans, responseSpy);
 
       setTimeout(() => {
@@ -241,20 +245,24 @@ describe('OTLPTraceExporter - node with json over http', () => {
             responseSpy.args[0][0].code,
             core.ExportResultCode.SUCCESS
           );
-          done();
         });
       });
+      clock.restore();
     });
 
     it('should log the error message', done => {
       const responseSpy = sinon.spy();
+      const clock = sinon.useFakeTimers();
       collectorExporter.export(spans, responseSpy);
+      // responseSpy result is >> [Function (anonymous)]
 
       setTimeout(() => {
         const mockResError = new MockedResponse(400);
+
         const args = stubRequest.args[0];
         const callback = args[1];
         callback(mockResError);
+
         mockResError.send('failed');
         setTimeout(() => {
           const result = responseSpy.args[0][0] as core.ExportResult;
@@ -266,6 +274,8 @@ describe('OTLPTraceExporter - node with json over http', () => {
           done();
         });
       });
+      clock.restore();
+      done();
     });
   });
 
@@ -316,6 +326,7 @@ describe('OTLPTraceExporter - node with json over http', () => {
       fakeRequest.on('data', chunk => {
         buff = Buffer.concat([buff, chunk]);
       });
+      done();
     });
 
   });

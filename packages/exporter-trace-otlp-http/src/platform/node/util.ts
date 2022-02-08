@@ -41,6 +41,8 @@ export function sendWithHttp<ExportItem, ServiceRequest>(
   onSuccess: () => void,
   onError: (error: otlpTypes.OTLPExporterError) => void
 ): void {
+  const exporterTimeout = collector._timeoutMillis;
+
   const parsedUrl = new url.URL(collector.url);
 
   const options: http.RequestOptions | https.RequestOptions = {
@@ -62,6 +64,7 @@ export function sendWithHttp<ExportItem, ServiceRequest>(
     let responseData = '';
     res.on('data', chunk => (responseData += chunk));
     res.on('end', () => {
+
       if (res.statusCode && res.statusCode < 299) {
         diag.debug(`statusCode: ${res.statusCode}`, responseData);
         onSuccess();
@@ -76,9 +79,16 @@ export function sendWithHttp<ExportItem, ServiceRequest>(
     });
   });
 
+  req.setTimeout(exporterTimeout, function requestTimeout () {
+    req.destroy();
+  });
 
-  req.on('error', (error: Error) => {
-    onError(error);
+  req.on('error', (error: Error | any) => {
+    if (error.code === 'ECONNRESET') {
+      onError(new Error('Request Timeout'));
+    } else {
+      onError(error);
+    }
   });
 
   switch (collector.compression) {
