@@ -54,7 +54,7 @@ class OTLPTraceExporter extends OTLPExporterBase<
   }
 }
 
-describe('OTLPTraceExporter - common', () => {
+describe.skip('OTLPTraceExporter - common', () => {
   let collectorExporter: OTLPTraceExporter;
   let collectorExporterConfig: CollectorExporterConfig;
 
