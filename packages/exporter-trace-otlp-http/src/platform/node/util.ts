@@ -90,8 +90,10 @@ export function sendWithHttp<ExportItem, ServiceRequest>(
       const err = new otlpTypes.OTLPExporterError(
         'Request Timeout', error.code
       );
+      clearTimeout(exporterTimer);
       onError(err);
     } else {
+      clearTimeout(exporterTimer);
       onError(error);
     }
   });
