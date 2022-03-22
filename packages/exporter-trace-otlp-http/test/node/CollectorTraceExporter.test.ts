@@ -449,4 +449,42 @@ describe('OTLPTraceExporter - node with json over http', () => {
       }, 300);
     });
   });
+  describe.only('export - with timeout', () => {
+    const server = http.createServer(function (req, res) {
+
+      // delay response
+      // setTimeout(() => {
+      //   res.statusCode = 200;
+      //   res.end();
+      // }, 2000)
+
+      res.statusCode = 200;
+      res.end();
+    });
+    beforeEach(() => {
+      server.listen(8080); //3 - listen for any incoming requests
+      console.log('Node.js web server at port 8080 is running..');
+
+      spySetHeader = sinon.spy();
+      collectorExporterConfig = {
+        attributes: {},
+        url: 'http://localhost:8080',
+        keepAlive: true,
+        httpAgentOptions: { keepAliveMsecs: 2000 },
+        timeoutMillis: 10,
+      };
+      collectorExporter = new OTLPTraceExporter(collectorExporterConfig);
+      spans = [];
+      spans.push(Object.assign({}, mockedReadableSpan));
+    });
+    afterEach(() => {
+      server.close();
+    });
+    it('should log the timeout request error message', done => {
+      collectorExporter.export(spans, result => {
+        console.log('result is', result);
+        done();
+      });
+    });
+  });
 });

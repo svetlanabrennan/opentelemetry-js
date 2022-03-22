@@ -45,10 +45,15 @@ export function sendWithHttp<ExportItem, ServiceRequest>(
   const exporterTimeout = collector.timeoutMillis;
   const parsedUrl = new url.URL(collector.url);
   let reqIsDestroyed: boolean;
+  const nodeVersion = Number(process.versions.node.split(".")[0]);
 
   const exporterTimer = setTimeout(() => {
     reqIsDestroyed = true;
-    req.destroy();
+    if (Number(nodeVersion) >= 14) {
+      req.destroy();
+    } else {
+        req.abort();
+    }
   }, exporterTimeout);
 
   const options: http.RequestOptions | https.RequestOptions = {
@@ -69,8 +74,33 @@ export function sendWithHttp<ExportItem, ServiceRequest>(
   const req = request(options, (res: http.IncomingMessage) => {
     let responseData = '';
     res.on('data', chunk => (responseData += chunk));
+
+    // manually testing destroying request after response received
+    // nodeVersion >= 14 ? req.destroy() : req.abort();
+    // reqIsDestroyed = true;
+
+    res.on('aborted', () => {
+      console.log('inside res.on(aborted)');
+    });
+
+    res.on('error', () => {
+      console.log('inside res.on(error)');
+    });
+
     res.on('end', () => {
-      if (res.statusCode && res.statusCode < 299) {
+      console.log('req.destroyed => ', req.destroyed, 'req.aborted => ', req.aborted)
+      // v13 bug: we can use req.destroy but it won’t set req.destroyed to true so we need to use req.abort
+      if (nodeVersion >= 14 && req.destroyed && reqIsDestroyed) {
+          const err = new otlpTypes.OTLPExporterError(
+              'Request Timeout'
+            );
+            onError(err);
+      } else if (nodeVersion < 14 && req.aborted && reqIsDestroyed) {
+          const err = new otlpTypes.OTLPExporterError(
+              'Request Timeout'
+            );
+            onError(err);
+      } else if (res.statusCode && res.statusCode < 299) {
         diag.debug(`statusCode: ${res.statusCode}`, responseData);
         onSuccess();
       } else {
@@ -96,6 +126,10 @@ export function sendWithHttp<ExportItem, ServiceRequest>(
       onError(error);
     }
   });
+
+  req.on('abort', () => {
+    console.log('req aborted')
+  })
 
   switch (collector.compression) {
     case CompressionAlgorithm.GZIP: {
