@@ -127,9 +127,9 @@ export function sendWithHttp<ExportItem, ServiceRequest>(
     }
   });
 
-  req.on('abort', () => {
-    console.log('req aborted')
-  })
+  // req.on('abort', () => {
+  //   console.log('req aborted')
+  // })
 
   switch (collector.compression) {
     case CompressionAlgorithm.GZIP: {
