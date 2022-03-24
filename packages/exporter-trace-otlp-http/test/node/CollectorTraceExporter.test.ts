@@ -449,21 +449,15 @@ describe('OTLPTraceExporter - node with json over http', () => {
       }, 300);
     });
   });
-  describe.only('export - real http request with timeout', () => {
+  describe('export - eal http request destroyed before response receivedt', () => {
     const server = http.createServer(function (req, res) {
-
-      // delay response
       setTimeout(() => {
         res.statusCode = 200;
         res.end();
-      }, 500)
-
-      // res.statusCode = 200;
-      // res.end();
+      }, 200)
     });
     beforeEach(() => {
-      server.listen(8080); //3 - listen for any incoming requests
-      console.log('Node.js web server at port 8080 is running..');
+      server.listen(8080);
     });
     afterEach(() => {
       server.close();
@@ -472,6 +466,35 @@ describe('OTLPTraceExporter - node with json over http', () => {
       collectorExporterConfig = {
         url: 'http://localhost:8080',
         timeoutMillis: 100,
+      };
+      collectorExporter = new OTLPTraceExporter(collectorExporterConfig);
+      spans = [];
+      spans.push(Object.assign({}, mockedReadableSpan));
+
+      collectorExporter.export(spans, result => {
+        console.log('result is', result);
+        assert.strictEqual(result.code, core.ExportResultCode.FAILED);
+        const error = result.error as otlpTypes.OTLPExporterError;
+        assert.ok(error !== undefined);
+        assert.strictEqual(error.message, 'Request Timeout');
+        done();
+      });
+    });
+  });
+  describe('export - real http request destroyed after response received', () => {
+    const server = http.createServer(function (req, res) {
+      res.write('writing something');
+    });
+    beforeEach(() => {
+      server.listen(8080);
+    });
+    afterEach(() => {
+      server.close();
+    });
+    it('should log the timeout request error message', done => {
+      collectorExporterConfig = {
+        url: 'http://localhost:8080',
+        timeoutMillis: 300,
       };
       collectorExporter = new OTLPTraceExporter(collectorExporterConfig);
       spans = [];

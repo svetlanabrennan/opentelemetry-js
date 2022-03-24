@@ -52,7 +52,7 @@ export function sendWithHttp<ExportItem, ServiceRequest>(
     if (Number(nodeVersion) >= 14) {
       req.destroy();
     } else {
-        req.abort();
+      req.abort();
     }
   }, exporterTimeout);
 
@@ -80,38 +80,30 @@ export function sendWithHttp<ExportItem, ServiceRequest>(
     // reqIsDestroyed = true;
 
     res.on('aborted', () => {
-      console.log('inside res.on(aborted)');
-    });
-
-    res.on('error', () => {
-      console.log('inside res.on(error)');
+      if (reqIsDestroyed) {
+        const err = new otlpTypes.OTLPExporterError(
+          'Request Timeout'
+        );
+        onError(err);
+      }
     });
 
     res.on('end', () => {
-      console.log('req.destroyed => ', req.destroyed, 'req.aborted => ', req.aborted)
-      // v13 bug: we can use req.destroy but it won’t set req.destroyed to true so we need to use req.abort
-      if (nodeVersion >= 14 && req.destroyed && reqIsDestroyed) {
-          const err = new otlpTypes.OTLPExporterError(
-              'Request Timeout'
-            );
-            onError(err);
-      } else if (nodeVersion < 14 && req.aborted && reqIsDestroyed) {
-          const err = new otlpTypes.OTLPExporterError(
-              'Request Timeout'
-            );
-            onError(err);
-      } else if (res.statusCode && res.statusCode < 299) {
-        diag.debug(`statusCode: ${res.statusCode}`, responseData);
-        onSuccess();
-      } else {
-        const error = new otlpTypes.OTLPExporterError(
-          res.statusMessage,
-          res.statusCode,
-          responseData
-        );
-        onError(error);
+      console.log("res code is", res.statusCode)
+      if (!reqIsDestroyed) {
+        if (res.statusCode && res.statusCode < 299) {
+          diag.debug(`statusCode: ${res.statusCode}`, responseData);
+          onSuccess();
+        } else {
+          const error = new otlpTypes.OTLPExporterError(
+            res.statusMessage,
+            res.statusCode,
+            responseData
+          );
+          onError(error);
+        }
+        clearTimeout(exporterTimer);
       }
-      clearTimeout(exporterTimer);
     });
   });
 
@@ -126,10 +118,6 @@ export function sendWithHttp<ExportItem, ServiceRequest>(
       onError(error);
     }
   });
-
-  // req.on('abort', () => {
-  //   console.log('req aborted')
-  // })
 
   switch (collector.compression) {
     case CompressionAlgorithm.GZIP: {
