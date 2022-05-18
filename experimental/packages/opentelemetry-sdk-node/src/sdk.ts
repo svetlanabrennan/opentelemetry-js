@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { TextMapPropagator } from '@opentelemetry/api';
+import { diag, TextMapPropagator } from '@opentelemetry/api';
 import { metrics } from '@opentelemetry/api-metrics';
 import { ContextManager } from '@opentelemetry/api';
 import { MeterProvider, MetricReader } from '@opentelemetry/sdk-metrics-base';
@@ -32,8 +32,12 @@ import {
   Resource,
   ResourceDetectionConfig,
 } from '@opentelemetry/resources';
-import { BatchSpanProcessor, SpanProcessor } from '@opentelemetry/sdk-trace-base';
+import { BatchSpanProcessor, SpanExporter, SpanProcessor, ConsoleSpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { NodeSDKConfiguration } from './types';
+import { getEnv } from '@opentelemetry/core';
+import { OTLPTraceExporter as OTLPProtoTraceExporter } from '@opentelemetry/exporter-trace-otlp-proto';
+import { OTLPTraceExporter as OTLPHttpTraceExporter} from '@opentelemetry/exporter-trace-otlp-http';
+import { OTLPTraceExporter as OTLPGrpcTraceExporter} from '@opentelemetry/exporter-trace-otlp-grpc';
 
 /** This class represents everything needed to register a fully configured OpenTelemetry Node.js SDK */
 export class NodeSDK {
@@ -53,6 +57,10 @@ export class NodeSDK {
   private _tracerProvider?: NodeTracerProvider;
   private _meterProvider?: MeterProvider;
 
+  private DATA_TYPE_TRACES = 'traces';
+
+  private _spanProcessors?: (BatchSpanProcessor | SimpleSpanProcessor)[];
+
   /**
    * Create a new NodeJS SDK instance
    */
@@ -61,9 +69,11 @@ export class NodeSDK {
 
     this._autoDetectResources = configuration.autoDetectResources ?? true;
 
-    if (configuration.spanProcessor || configuration.traceExporter) {
-      const tracerProviderConfig: NodeTracerConfig = {};
+    const tracerProviderConfig: NodeTracerConfig = {};
 
+    // let spanProcessors: BatchSpanProcessor[];
+
+    if (configuration.spanProcessor || configuration.traceExporter) {
       if (configuration.sampler) {
         tracerProviderConfig.sampler = configuration.sampler;
       }
@@ -81,6 +91,23 @@ export class NodeSDK {
         configuration.contextManager,
         configuration.textMapPropagator
       );
+    // create trace exporter(s) from env
+    } else {
+      let traceExportersList = this.retrieveListOfExporters('trace');
+
+      if (traceExportersList.length > 1 && traceExportersList.includes('none')) {
+        diag.warn('OTEL_TRACES_EXPORTER contains "none" along with other exporters. Using default otlp exporter.');
+        traceExportersList = ['otlp'];
+      } else if (traceExportersList[0] === 'none') {
+        diag.warn('OTEL_TRACES_EXPORTER contains "none". SDK will not be initialized');
+      } else {
+        const configuredExporters: SpanExporter[] =
+          traceExportersList.map(exporterName => {
+            return this.configureExporter(exporterName);
+          });
+
+        this._spanProcessors = this.configureSpanProcessors(configuredExporters);
+      }
     }
 
     if (configuration.metricReader) {
@@ -92,6 +119,97 @@ export class NodeSDK {
       instrumentations = configuration.instrumentations;
     }
     this._instrumentations = instrumentations;
+  }
+
+  public configureSpanProcessors(exporters: SpanExporter[]): (BatchSpanProcessor | SimpleSpanProcessor)[] {
+    return exporters.map(exporter => {
+      if (exporter instanceof ConsoleSpanExporter) {
+        return new SimpleSpanProcessor(exporter);
+      } else {
+        return new BatchSpanProcessor(exporter);
+      }
+    });
+  }
+
+  private retrieveListOfExporters(type: string): string[]{
+    if (type === 'trace') {
+      const traceList = getEnv().OTEL_TRACES_EXPORTER.split(',');
+      const uniqueTraceExporters = Array.from(
+        new Set(traceList)
+      );
+
+      return this.filterBlanksAndNulls(uniqueTraceExporters);
+    } else if (type === 'metric') {
+      const metricList = getEnv().OTEL_METRICS_EXPORTER;
+
+      const uniqueMetricExporters = Array.from(
+        new Set(metricList)
+      );
+
+      return this.filterBlanksAndNulls(uniqueMetricExporters);
+    } else {
+      const traceList = getEnv().OTEL_LOGS_EXPORTER.split(',');
+      const uniqueLogExporters = Array.from(
+        new Set(traceList)
+      );
+
+      return this.filterBlanksAndNulls(uniqueLogExporters);
+    }
+  }
+
+  private filterBlanksAndNulls(list: string[]): string[] {
+    return list.map(item => item.trim())
+      .filter(s => s !== 'null' && s !== '');
+  }
+
+  public configureExporter(name: string): SpanExporter {
+    switch (name) {
+      // case 'jaegar':
+      //   return this.configureJaeger();
+      // case 'zipkin':
+      //   return this.configureZipkin();
+      // case 'console':
+      //   return this.configureConsole();
+      default:
+        return this.configureOtlp();
+    }
+  }
+
+  public configureOtlp(): SpanExporter {
+    const protocol = this.getOtlpProtocol(this.DATA_TYPE_TRACES);
+
+    if (protocol === 'http/protobuf') {
+      // TODO: add enpoint, headers
+      return new OTLPProtoTraceExporter();
+    } else if (protocol === 'grpc') {
+      // TODO: add enpoint, headers, security
+      return new OTLPGrpcTraceExporter();
+    } else {
+      // TODO: add enpoint, headers
+      return new OTLPHttpTraceExporter();
+    }
+  }
+  // public configureJaeger(): SpanExporter {
+
+  // }
+
+  // public configureZipkin(): SpanExporter {
+
+  // }
+
+  // public configureConsole(): SpanExporter {
+
+  // }
+
+  public getOtlpProtocol(dataType: string): string {
+    switch (dataType) {
+      case 'traces':
+        return getEnv().OTEL_EXPORTER_OTLP_TRACES_PROTOCOL;
+      case 'metrics':
+        return getEnv().OTEL_EXPORTER_OTLP_METRICS_PROTOCOL;
+      default:
+        return getEnv().OTEL_EXPORTER_OTLP_PROTOCOL;
+    }
   }
 
   /** Set configurations required to register a NodeTracerProvider */
@@ -149,6 +267,22 @@ export class NodeSDK {
       tracerProvider.register({
         contextManager: this._tracerProviderConfig.contextManager,
         propagator: this._tracerProviderConfig.textMapPropagator,
+      });
+    }
+
+    if (this._spanProcessors) {
+      const tracerProvider = new NodeTracerProvider({
+        // ...this._tracerProviderConfig.tracerConfig,
+        resource: this._resource,
+      });
+
+      this._spanProcessors.forEach(processor => {
+        tracerProvider.addSpanProcessor(processor);
+      });
+
+      tracerProvider.register({
+        // contextManager: this._tracerProviderConfig.contextManager,
+        // propagator: this._tracerProviderConfig.textMapPropagator,
       });
     }
 

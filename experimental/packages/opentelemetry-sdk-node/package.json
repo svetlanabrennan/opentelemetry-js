@@ -52,7 +52,12 @@
     "@opentelemetry/resources": "1.2.0",
     "@opentelemetry/sdk-metrics-base": "0.28.0",
     "@opentelemetry/sdk-trace-base": "1.2.0",
-    "@opentelemetry/sdk-trace-node": "1.2.0"
+    "@opentelemetry/sdk-trace-node": "1.2.0",
+    "@opentelemetry/exporter-trace-otlp-proto": "0.28.0",
+    "@opentelemetry/exporter-trace-otlp-http": "0.28.0",
+    "@opentelemetry/exporter-trace-otlp-grpc": "0.28.0",
+    "@opentelemetry/exporter-zipkin": "1.2.0",
+    "@opentelemetry/exporter-jaeger": "1.2.0"
   },
   "peerDependencies": {
     "@opentelemetry/api": ">=1.0.0 <1.2.0"

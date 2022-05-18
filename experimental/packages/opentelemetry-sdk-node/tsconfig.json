@@ -16,6 +16,12 @@
       "path": "../../../packages/opentelemetry-core"
     },
     {
+      "path": "../../../packages/opentelemetry-exporter-jaeger"
+    },
+    {
+      "path": "../../../packages/opentelemetry-exporter-zipkin"
+    },
+    {
       "path": "../../../packages/opentelemetry-resources"
     },
     {
@@ -23,6 +29,15 @@
     },
     {
       "path": "../../../packages/opentelemetry-sdk-trace-node"
+    },
+    {
+      "path": "../exporter-trace-otlp-grpc"
+    },
+    {
+      "path": "../exporter-trace-otlp-http"
+    },
+    {
+      "path": "../exporter-trace-otlp-proto"
     },
     {
       "path": "../opentelemetry-api-metrics"
