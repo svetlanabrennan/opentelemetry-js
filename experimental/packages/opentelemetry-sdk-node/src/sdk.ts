@@ -54,6 +54,7 @@ export class NodeSDK {
 
   private _autoDetectResources: boolean;
 
+  // should this be public?
   private _tracerProvider?: NodeTracerProvider;
   private _meterProvider?: MeterProvider;
 
@@ -70,8 +71,6 @@ export class NodeSDK {
     this._autoDetectResources = configuration.autoDetectResources ?? true;
 
     const tracerProviderConfig: NodeTracerConfig = {};
-
-    // let spanProcessors: BatchSpanProcessor[];
 
     if (configuration.spanProcessor || configuration.traceExporter) {
       if (configuration.sampler) {
@@ -93,19 +92,21 @@ export class NodeSDK {
       );
     // create trace exporter(s) from env
     } else {
-      let traceExportersList = this.retrieveListOfExporters('trace');
+      let traceExportersList = this.retrieveListOfTraceExporters();
 
-      if (traceExportersList.length > 1 && traceExportersList.includes('none')) {
-        diag.warn('OTEL_TRACES_EXPORTER contains "none" along with other exporters. Using default otlp exporter.');
-        traceExportersList = ['otlp'];
-      } else if (traceExportersList[0] === 'none') {
-        diag.warn('OTEL_TRACES_EXPORTER contains "none". SDK will not be initialized');
+      if (traceExportersList[0] === 'none') {
+        diag.warn('OTEL_TRACES_EXPORTER contains "none". SDK will not be initialized.');
       } else {
+        if (traceExportersList.length > 1 && traceExportersList.includes('none')) {
+          diag.warn('OTEL_TRACES_EXPORTER contains "none" along with other exporters. Using default otlp exporter.');
+          traceExportersList = ['otlp'];
+        }
+
         const configuredExporters: SpanExporter[] =
           traceExportersList.map(exporterName => {
             return this.configureExporter(exporterName);
           });
-
+  
         this._spanProcessors = this.configureSpanProcessors(configuredExporters);
       }
     }
@@ -121,6 +122,7 @@ export class NodeSDK {
     this._instrumentations = instrumentations;
   }
 
+  // visible for testing
   public configureSpanProcessors(exporters: SpanExporter[]): (BatchSpanProcessor | SimpleSpanProcessor)[] {
     return exporters.map(exporter => {
       if (exporter instanceof ConsoleSpanExporter) {
@@ -131,30 +133,15 @@ export class NodeSDK {
     });
   }
 
-  private retrieveListOfExporters(type: string): string[]{
-    if (type === 'trace') {
-      const traceList = getEnv().OTEL_TRACES_EXPORTER.split(',');
-      const uniqueTraceExporters = Array.from(
-        new Set(traceList)
-      );
+  // visible for testing
+  // only handles trace exporters for now
+  public retrieveListOfTraceExporters(): string[] {
+    const traceList = getEnv().OTEL_TRACES_EXPORTER.split(',');
+    const uniqueTraceExporters = Array.from(
+      new Set(traceList)
+    );
 
-      return this.filterBlanksAndNulls(uniqueTraceExporters);
-    } else if (type === 'metric') {
-      const metricList = getEnv().OTEL_METRICS_EXPORTER;
-
-      const uniqueMetricExporters = Array.from(
-        new Set(metricList)
-      );
-
-      return this.filterBlanksAndNulls(uniqueMetricExporters);
-    } else {
-      const traceList = getEnv().OTEL_LOGS_EXPORTER.split(',');
-      const uniqueLogExporters = Array.from(
-        new Set(traceList)
-      );
-
-      return this.filterBlanksAndNulls(uniqueLogExporters);
-    }
+    return this.filterBlanksAndNulls(uniqueTraceExporters);
   }
 
   private filterBlanksAndNulls(list: string[]): string[] {
@@ -179,13 +166,10 @@ export class NodeSDK {
     const protocol = this.getOtlpProtocol(this.DATA_TYPE_TRACES);
 
     if (protocol === 'http/protobuf') {
-      // TODO: add enpoint, headers
       return new OTLPProtoTraceExporter();
     } else if (protocol === 'grpc') {
-      // TODO: add enpoint, headers, security
       return new OTLPGrpcTraceExporter();
     } else {
-      // TODO: add enpoint, headers
       return new OTLPHttpTraceExporter();
     }
   }
@@ -204,7 +188,7 @@ export class NodeSDK {
   public getOtlpProtocol(dataType: string): string {
     switch (dataType) {
       case 'traces':
-        return getEnv().OTEL_EXPORTER_OTLP_TRACES_PROTOCOL;
+        return getEnv().OTEL_EXPORTER_OTLP_TRACES_PROTOCOL;;
       case 'metrics':
         return getEnv().OTEL_EXPORTER_OTLP_METRICS_PROTOCOL;
       default:
@@ -268,22 +252,16 @@ export class NodeSDK {
         contextManager: this._tracerProviderConfig.contextManager,
         propagator: this._tracerProviderConfig.textMapPropagator,
       });
-    }
+    } else if(this._spanProcessors) {
+      const tracerProvider = new NodeTracerProvider();
 
-    if (this._spanProcessors) {
-      const tracerProvider = new NodeTracerProvider({
-        // ...this._tracerProviderConfig.tracerConfig,
-        resource: this._resource,
-      });
+      this._tracerProvider = tracerProvider;
 
       this._spanProcessors.forEach(processor => {
-        tracerProvider.addSpanProcessor(processor);
+        this._tracerProvider.addSpanProcessor(processor);
       });
 
-      tracerProvider.register({
-        // contextManager: this._tracerProviderConfig.contextManager,
-        // propagator: this._tracerProviderConfig.textMapPropagator,
-      });
+      tracerProvider.register();
     }
 
     if (this._metricReader) {
@@ -301,6 +279,11 @@ export class NodeSDK {
     registerInstrumentations({
       instrumentations: this._instrumentations,
     });
+  }
+
+  // for testing only
+  public displayTracerProviders(): NodeTracerProvider | undefined {
+    return this._tracerProvider;
   }
 
   public shutdown(): Promise<void> {

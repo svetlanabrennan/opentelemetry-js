@@ -39,9 +39,13 @@ import {
   assertServiceResource,
 } from './util/resource-assertions';
 import {
+  BatchSpanProcessor,
   ConsoleSpanExporter,
   SimpleSpanProcessor,
 } from '@opentelemetry/sdk-trace-base';
+import { OTLPTraceExporter as OTLPProtoTraceExporter } from '@opentelemetry/exporter-trace-otlp-proto';
+import { OTLPTraceExporter as OTLPHttpTraceExporter} from '@opentelemetry/exporter-trace-otlp-http';
+import { OTLPTraceExporter as OTLPGrpcTraceExporter} from '@opentelemetry/exporter-trace-otlp-grpc';
 import * as assert from 'assert';
 import {
   BASE_PATH,
@@ -54,6 +58,8 @@ import * as nock from 'nock';
 import * as semver from 'semver';
 import * as Sinon from 'sinon';
 import { NodeSDK } from '../src';
+import { env } from 'process';
+import { stringify } from 'querystring';
 
 const HEADERS = {
   [HEADER_NAME.toLowerCase()]: HEADER_VALUE,
@@ -105,7 +111,7 @@ describe('Node SDK', () => {
     delegate = (trace.getTracerProvider() as ProxyTracerProvider).getDelegate();
   });
 
-  describe('Basic Registration', () => {
+  describe.skip('Basic Registration', () => {
     it('should not register any unconfigured SDK components', async () => {
       const sdk = new NodeSDK({
         autoDetectResources: false,
@@ -188,7 +194,7 @@ describe('Node SDK', () => {
     });
   });
 
-  describe('detectResources', async () => {
+  describe.skip('detectResources', async () => {
     beforeEach(() => {
       nock.disableNetConnect();
       process.env.OTEL_RESOURCE_ATTRIBUTES =
@@ -429,3 +435,105 @@ describe('Node SDK', () => {
     });
   });
 });
+
+describe('setup otlp exporter from env', () => {
+  let spyExporterList: Sinon.SinonSpy;
+  let spyConfigureExporter: Sinon.SinonSpy;
+  let spyConfigureSpanProcessors: Sinon.SinonSpy;
+  let spyGetOtlpProtocol: Sinon.SinonSpy;
+  let stubLoggerError: Sinon.SinonStub;
+  beforeEach(() => {
+    spyExporterList = Sinon.spy(NodeSDK.prototype, 'retrieveListOfTraceExporters');
+    spyConfigureExporter = Sinon.spy(NodeSDK.prototype, 'configureExporter');
+    spyConfigureSpanProcessors = Sinon.spy(NodeSDK.prototype, 'configureSpanProcessors');
+    spyGetOtlpProtocol = Sinon.spy(NodeSDK.prototype, 'getOtlpProtocol');
+    stubLoggerError = Sinon.stub(diag, 'warn');
+  });
+  afterEach(() => {
+    spyExporterList.restore();
+    spyConfigureExporter.restore();
+    spyConfigureSpanProcessors.restore();
+    spyGetOtlpProtocol.restore();
+    stubLoggerError.restore();
+  });
+  it('use default exporter when no exporters listed', () => {
+    new NodeSDK();
+
+    assert(spyExporterList.returned(['otlp']));
+    assert(spyConfigureExporter.calledWith('otlp'));
+    assert(spyConfigureSpanProcessors.args[0][0][0] instanceof OTLPProtoTraceExporter);
+    assert(spyConfigureSpanProcessors.args[0][0][0] instanceof OTLPHttpTraceExporter === false);
+    assert(spyConfigureSpanProcessors.returnValues[0][0] instanceof BatchSpanProcessor);
+  });
+  it('use otlp exporter and defined exporter protocol env value', () => {
+    env.OTEL_TRACES_EXPORTER = 'otlp';
+    env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL = 'grpc';
+    new NodeSDK();
+
+    assert(spyExporterList.returned(['otlp']));
+    assert(spyConfigureExporter.calledWith('otlp'));
+    assert(spyGetOtlpProtocol.returned('grpc'));
+    assert(spyConfigureSpanProcessors.args[0][0][0] instanceof OTLPGrpcTraceExporter);
+    assert(spyConfigureSpanProcessors.returnValues[0][0] instanceof BatchSpanProcessor);
+
+    delete env.OTEL_TRACES_EXPORTER;
+    delete env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL;
+  });
+  it('sdk will ignore protocol defined with no-signal env and use default instead', () => {
+    env.OTEL_TRACES_EXPORTER = 'otlp';
+    env.OTEL_EXPORTER_OTLP_PROTOCOL = 'grpc';
+    new NodeSDK();
+
+    assert(spyExporterList.returned(['otlp']));
+    assert(spyConfigureExporter.calledWith('otlp'));
+    assert(spyGetOtlpProtocol.returned('http/protobuf'));
+    delete env.OTEL_TRACES_EXPORTER;
+    delete env.OTEL_EXPORTER_OTLP_PROTOCOL;
+  });
+  // wip
+  it.skip('handle when trace exporter list is empty', () => {
+    env.OTEL_TRACES_EXPORTER = '';
+    new NodeSDK();
+
+    assert(spyExporterList.returned(['otlp']));
+    assert(spyConfigureExporter.calledWith('otlp'));
+    assert(spyGetOtlpProtocol.returned('http/protobuf'));
+    env.OTEL_TRACES_EXPORTER = '';
+    env.OTEL_EXPORTER_OTLP_PROTOCOL = '';
+  });
+  it('do not use any exporters when none value is only provided', () => {
+    env.OTEL_TRACES_EXPORTER = 'none';
+    new NodeSDK();
+
+    assert(spyExporterList.returned(['none']));
+    assert(spyConfigureExporter.notCalled);
+    delete env.OTEL_TRACES_EXPORTER;
+  });
+  it('log warning that sdk will not be initalized when exporter is set to none', () => {
+    env.OTEL_TRACES_EXPORTER = 'none';
+    new NodeSDK();
+
+    assert.strictEqual(stubLoggerError.args[0][0], 'OTEL_TRACES_EXPORTER contains "none". SDK will not be initialized.');
+    delete env.OTEL_TRACES_EXPORTER;
+  });
+  it('use default exporter when none value is provided with other exports', () => {
+    env.OTEL_TRACES_EXPORTER = 'otlp,zipkin,none';
+    new NodeSDK();
+
+    assert(spyExporterList.returned(['otlp', 'zipkin', 'none']));;
+    assert(spyConfigureExporter.calledWith('otlp'));
+    assert(spyConfigureSpanProcessors.args[0][0][0] instanceof OTLPProtoTraceExporter);
+    assert(spyConfigureSpanProcessors.args[0][0][0] instanceof OTLPHttpTraceExporter === false);
+    assert(spyConfigureSpanProcessors.returnValues[0][0] instanceof BatchSpanProcessor);
+    delete env.OTEL_TRACES_EXPORTER;
+  });
+  it('log warning that default exporter will be used since exporter list contains none with other exports ', () => {
+    env.OTEL_TRACES_EXPORTER = 'otlp,zipkin,none';
+    new NodeSDK();
+
+    assert.strictEqual(
+      stubLoggerError.args[0][0], 'OTEL_TRACES_EXPORTER contains "none" along with other exporters. Using default otlp exporter.'
+    );
+    delete env.OTEL_TRACES_EXPORTER;
+  });
+})
