@@ -112,6 +112,34 @@ describe('BasicTracerProvider', () => {
         });
       });
 
+      describe.skip('when general limit is defined via env', () => {
+        it('should have general limits value as defined with env', () => {
+          envSource.OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT = '115';
+          const tracer = new BasicTracerProvider().getTracer('default');
+          const generalLimits = tracer.getGeneralLimits();
+          assert.strictEqual(generalLimits.attributeValueLengthLimit, 115);
+          delete envSource.OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT;
+        });
+        it('should have span limits value same as general limit value', () => {
+          envSource.OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT = '125';
+          const tracer = new BasicTracerProvider().getTracer('default');
+          const spanLimits = tracer.getSpanLimits();
+          assert.strictEqual(spanLimits.attributeValueLengthLimit, 125);
+          delete envSource.OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT;
+        });
+        it('should have span limits and general limits as defined in env', () => {
+          envSource.OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT = '125';
+          envSource.OTEL_SPAN_ATTRIBUTE_VALUE_LENGTH_LIMIT = '109'
+          const tracer = new BasicTracerProvider().getTracer('default');
+          const spanLimits = tracer.getSpanLimits();
+          const generalLimits = tracer.getGeneralLimits();
+          assert.strictEqual(generalLimits.attributeValueLengthLimit, 125);
+          assert.strictEqual(spanLimits.attributeValueLengthLimit, 109);
+          delete envSource.OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT;
+          delete envSource.OTEL_SPAN_ATTRIBUTE_VALUE_LENGTH_LIMIT;
+        });
+      });
+
       describe('when "attributeValueLengthLimit" is defined', () => {
         it('should have tracer with defined value', () => {
           const tracer = new BasicTracerProvider({

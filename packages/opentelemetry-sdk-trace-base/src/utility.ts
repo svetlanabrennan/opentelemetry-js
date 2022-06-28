@@ -17,6 +17,7 @@
 import { Sampler } from '@opentelemetry/api';
 import { buildSamplerFromEnv, DEFAULT_CONFIG } from './config';
 import { SpanLimits, TracerConfig, GeneralLimits } from './types';
+import { DEFAULT_ATTRIBUTE_VALUE_LENGTH_LIMIT, DEFAULT_ATTRIBUTE_COUNT_LIMIT } from '@opentelemetry/core';
 
 /**
  * Function to merge Default configuration (as specified in './config') with
@@ -50,32 +51,22 @@ export function mergeConfig(userConfig: TracerConfig): TracerConfig & {
     userConfig.spanLimits || {}
   );
 
-  return target;
-}
-
-/**
- * When general limits are provided and model specific limits are not,
- * configures the model specific limits by using the values from the general ones.
- * @param userConfig User provided tracer configuration
- */
-export function reconfigureLimits(userConfig: TracerConfig): TracerConfig {
-  const spanLimits = Object.assign({}, userConfig.spanLimits);
-
   /**
    * When span attribute count limit is not defined, but general attribute count limit is defined
    * Then, span attribute count limit will be same as general one
    */
-  if (spanLimits.attributeCountLimit == null && userConfig.generalLimits?.attributeCountLimit != null) {
-    spanLimits.attributeCountLimit = userConfig.generalLimits.attributeCountLimit;
+
+  if (target.spanLimits.attributeCountLimit === DEFAULT_ATTRIBUTE_COUNT_LIMIT && target.generalLimits.attributeCountLimit !== DEFAULT_ATTRIBUTE_COUNT_LIMIT) {
+    target.spanLimits.attributeCountLimit = target.generalLimits.attributeCountLimit;
   }
 
   /**
    * When span attribute value length limit is not defined, but general attribute value length limit is defined
    * Then, span attribute value length limit will be same as general one
    */
-  if (spanLimits.attributeValueLengthLimit == null && userConfig.generalLimits?.attributeValueLengthLimit != null) {
-    spanLimits.attributeValueLengthLimit = userConfig.generalLimits.attributeValueLengthLimit;
+  if (target.spanLimits.attributeValueLengthLimit === DEFAULT_ATTRIBUTE_VALUE_LENGTH_LIMIT && target.generalLimits.attributeValueLengthLimit !== DEFAULT_ATTRIBUTE_VALUE_LENGTH_LIMIT) {
+    target.spanLimits.attributeValueLengthLimit = target.generalLimits.attributeValueLengthLimit;
   }
 
-  return Object.assign({}, userConfig, { spanLimits });
+  return target;
 }
