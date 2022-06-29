@@ -40,6 +40,9 @@
       "path": "../exporter-trace-otlp-proto"
     },
     {
+      "path": "../../../packages/opentelemetry-semantic-conventions"
+    },
+    {
       "path": "../opentelemetry-api-metrics"
     },
     {

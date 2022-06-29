@@ -6,6 +6,29 @@ All notable changes to this project will be documented in this file.
 
 ### :boom: Breaking Change
 
+### :rocket: (Enhancement)
+
+### :bug: (Bug Fix)
+
+* fix(resources): fix browser compatibility for host and os detectors [#3004](https://github.com/open-telemetry/opentelemetry-js/pull/3004) @legendecas
+* fix(sdk-trace-base): fix crash on environments without global document [#3000](https://github.com/open-telemetry/opentelemetry-js/pull/3000) @legendecas
+
+### :books: (Refine Doc)
+
+### :house: (Internal)
+
+* test: add node 18 and remove EoL node versions [#3048](https://github.com/open-telemetry/opentelemetry-js/pull/3048) @dyladan
+
+## 1.3.1
+
+### :bug: (Bug Fix)
+
+* fix(resources): fix browser compatibility for host and os detectors [#3004](https://github.com/open-telemetry/opentelemetry-js/pull/3004) @legendecas
+
+## 1.3.0
+
+### :boom: Breaking Change
+
 * chore: remove unused InstrumentationConfig#path [#2944](https://github.com/open-telemetry/opentelemetry-js/pull/2944) @flarna
 
 ### :rocket: (Enhancement)
@@ -17,6 +40,8 @@ All notable changes to this project will be documented in this file.
 * feat(opentelemetry-core): add InstrumentationScope [#2959](https://github.com/open-telemetry/opentelemetry-js/pull/2959) @pichlermarc
 
 ### :bug: (Bug Fix)
+
+* fix(sdk-web): parse url with relative url string [#2972](https://github.com/open-telemetry/opentelemetry-js/pull/2972) @legendecas
 
 ### :books: (Refine Doc)
 

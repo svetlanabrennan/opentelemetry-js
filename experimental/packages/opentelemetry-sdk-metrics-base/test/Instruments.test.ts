@@ -18,9 +18,24 @@ import * as assert from 'assert';
 import * as sinon from 'sinon';
 import { InstrumentationScope } from '@opentelemetry/core';
 import { Resource } from '@opentelemetry/resources';
-import { AggregationTemporality, InstrumentDescriptor, InstrumentType, MeterProvider, MetricReader, DataPoint, DataPointType } from '../src';
+import {
+  AggregationTemporality,
+  InstrumentDescriptor,
+  InstrumentType,
+  MeterProvider,
+  MetricReader,
+  DataPoint,
+  DataPointType
+} from '../src';
 import { TestMetricReader } from './export/TestMetricReader';
-import { assertMetricData, assertDataPoint, commonValues, commonAttributes, defaultResource, defaultInstrumentationScope } from './util';
+import {
+  assertMetricData,
+  assertDataPoint,
+  commonValues,
+  commonAttributes,
+  defaultResource,
+  defaultInstrumentationScope
+} from './util';
 import { Histogram } from '../src/aggregator/types';
 import { ObservableResult, ValueType } from '@opentelemetry/api-metrics';
 
@@ -64,7 +79,7 @@ describe('Instruments', () => {
         descriptor: {
           name: 'test',
           description: '',
-          unit: '1',
+          unit: '',
           type: InstrumentType.COUNTER,
           valueType: ValueType.INT,
         },
@@ -180,7 +195,7 @@ describe('Instruments', () => {
         descriptor: {
           name: 'test',
           description: '',
-          unit: '1',
+          unit: '',
           type: InstrumentType.UP_DOWN_COUNTER,
           valueType: ValueType.INT,
         },
@@ -257,15 +272,15 @@ describe('Instruments', () => {
       });
 
       histogram.record(10);
-      // -0.1 should be trunc-ed to -0
-      histogram.record(-0.1);
+      // 0.1 should be trunc-ed to 0
+      histogram.record(0.1);
       histogram.record(100, { foo: 'bar' });
-      histogram.record(-0.1, { foo: 'bar' });
+      histogram.record(0.1, { foo: 'bar' });
       await validateExport(deltaReader, {
         descriptor: {
           name: 'test',
           description: '',
-          unit: '1',
+          unit: '',
           type: InstrumentType.HISTOGRAM,
           valueType: ValueType.INT,
         },
@@ -280,6 +295,9 @@ describe('Instruments', () => {
               },
               count: 2,
               sum: 10,
+              hasMinMax: true,
+              max: 10,
+              min: 0
             },
           },
           {
@@ -291,12 +309,98 @@ describe('Instruments', () => {
               },
               count: 2,
               sum: 100,
+              hasMinMax: true,
+              max: 100,
+              min: 0
             },
           },
         ],
       });
     });
 
+    it('should collect min and max', async () => {
+      const { meter, deltaReader, cumulativeReader } = setup();
+      const histogram = meter.createHistogram('test', {
+        valueType: ValueType.INT,
+      });
+
+      histogram.record(10);
+      histogram.record(100);
+      await deltaReader.collect();
+      await cumulativeReader.collect();
+
+      histogram.record(20);
+      histogram.record(90);
+
+      // Delta should only have min/max of values recorded after the collection.
+      await validateExport(deltaReader, {
+        descriptor: {
+          name: 'test',
+          description: '',
+          unit: '',
+          type: InstrumentType.HISTOGRAM,
+          valueType: ValueType.INT,
+        },
+        dataPointType: DataPointType.HISTOGRAM,
+        dataPoints: [
+          {
+            attributes: {},
+            value: {
+              buckets: {
+                boundaries: [0, 5, 10, 25, 50, 75, 100, 250, 500, 1000],
+                counts: [0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0],
+              },
+              count: 2,
+              sum: 110,
+              hasMinMax: true,
+              min: 20,
+              max: 90
+            },
+          }
+        ],
+      });
+
+      // Cumulative should have min/max of all recorded values.
+      await validateExport(cumulativeReader, {
+        descriptor: {
+          name: 'test',
+          description: '',
+          unit: '',
+          type: InstrumentType.HISTOGRAM,
+          valueType: ValueType.INT,
+        },
+        dataPointType: DataPointType.HISTOGRAM,
+        dataPoints: [
+          {
+            attributes: {},
+            value: {
+              buckets: {
+                boundaries: [0, 5, 10, 25, 50, 75, 100, 250, 500, 1000],
+                counts: [0, 0, 0, 2, 0, 0, 1, 1, 0, 0, 0],
+              },
+              count: 4,
+              sum: 220,
+              hasMinMax: true,
+              min: 10,
+              max: 100
+            },
+          }
+        ],
+      });
+    });
+
+    it('should not record negative INT values', async () => {
+      const { meter, deltaReader } = setup();
+      const histogram = meter.createHistogram('test', {
+        valueType: ValueType.DOUBLE,
+      });
+
+      histogram.record(-1, { foo: 'bar' });
+      await validateExport(deltaReader, {
+        dataPointType: DataPointType.HISTOGRAM,
+        dataPoints: [],
+      });
+    });
 
     it('should record DOUBLE values', async () => {
       const { meter, deltaReader } = setup();
@@ -305,9 +409,9 @@ describe('Instruments', () => {
       });
 
       histogram.record(10);
-      histogram.record(-0.1);
+      histogram.record(0.1);
       histogram.record(100, { foo: 'bar' });
-      histogram.record(-0.1, { foo: 'bar' });
+      histogram.record(0.1, { foo: 'bar' });
       await validateExport(deltaReader, {
         dataPointType: DataPointType.HISTOGRAM,
         dataPoints: [
@@ -316,10 +420,13 @@ describe('Instruments', () => {
             value: {
               buckets: {
                 boundaries: [0, 5, 10, 25, 50, 75, 100, 250, 500, 1000],
-                counts: [1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0],
+                counts: [0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0],
               },
               count: 2,
-              sum: 9.9,
+              sum: 10.1,
+              hasMinMax: true,
+              max: 10,
+              min: 0.1
             },
           },
           {
@@ -327,13 +434,29 @@ describe('Instruments', () => {
             value: {
               buckets: {
                 boundaries: [0, 5, 10, 25, 50, 75, 100, 250, 500, 1000],
-                counts: [1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
+                counts: [0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0],
               },
               count: 2,
-              sum: 99.9,
+              sum: 100.1,
+              hasMinMax: true,
+              max: 100,
+              min: 0.1
             },
           },
         ],
+      });
+    });
+
+    it('should not record negative DOUBLE values', async () => {
+      const { meter, deltaReader } = setup();
+      const histogram = meter.createHistogram('test', {
+        valueType: ValueType.DOUBLE,
+      });
+
+      histogram.record(-0.5, { foo: 'bar' });
+      await validateExport(deltaReader, {
+        dataPointType: DataPointType.HISTOGRAM,
+        dataPoints: [],
       });
     });
   });
@@ -348,7 +471,8 @@ describe('Instruments', () => {
           }
         }
       });
-      meter.createObservableCounter('test', callback);
+      const observableCounter = meter.createObservableCounter('test');
+      observableCounter.addCallback(callback);
 
       await deltaReader.collect();
       assert.strictEqual(callback.callCount, 1);
@@ -357,7 +481,8 @@ describe('Instruments', () => {
     it('should observe values', async () => {
       const { meter, cumulativeReader } = setup();
       let callCount = 0;
-      meter.createObservableCounter('test', observableResult => {
+      const observableCounter = meter.createObservableCounter('test');
+      observableCounter.addCallback(observableResult => {
         observableResult.observe(++callCount);
         observableResult.observe(1, { foo: 'bar' });
       });
@@ -401,7 +526,8 @@ describe('Instruments', () => {
           }
         }
       });
-      meter.createObservableUpDownCounter('test', callback);
+      const observableUpDownCounter = meter.createObservableUpDownCounter('test');
+      observableUpDownCounter.addCallback(callback);
 
       await deltaReader.collect();
       assert.strictEqual(callback.callCount, 1);
@@ -410,7 +536,8 @@ describe('Instruments', () => {
     it('should observe values', async () => {
       const { meter, cumulativeReader } = setup();
       let callCount = 0;
-      meter.createObservableUpDownCounter('test', observableResult => {
+      const observableUpDownCounter = meter.createObservableUpDownCounter('test');
+      observableUpDownCounter.addCallback(observableResult => {
         observableResult.observe(++callCount);
         observableResult.observe(1, { foo: 'bar' });
       });
@@ -454,7 +581,8 @@ describe('Instruments', () => {
           }
         }
       });
-      meter.createObservableGauge('test', callback);
+      const observableGauge = meter.createObservableGauge('test');
+      observableGauge.addCallback(callback);
 
       await deltaReader.collect();
       assert.strictEqual(callback.callCount, 1);
@@ -463,7 +591,8 @@ describe('Instruments', () => {
     it('should observe values', async () => {
       const { meter, cumulativeReader } = setup();
       let num = 0;
-      meter.createObservableGauge('test', observableResult => {
+      const observableGauge = meter.createObservableGauge('test');
+      observableGauge.addCallback(observableResult => {
         num += 10;
         if (num === 30) {
           observableResult.observe(-1);
