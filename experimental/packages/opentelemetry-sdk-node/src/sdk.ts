@@ -157,8 +157,8 @@ export class NodeSDK {
       //   return this.configureJaeger();
       // case 'zipkin':
       //   return this.configureZipkin();
-      // case 'console':
-      //   return this.configureConsole();
+      case 'console':
+        return this.configureConsole();
       default:
         return this.configureOtlp();
     }
@@ -183,9 +183,9 @@ export class NodeSDK {
 
   // }
 
-  // public configureConsole(): SpanExporter {
-
-  // }
+  public configureConsole(): SpanExporter {
+    return new ConsoleSpanExporter();
+  }
 
   public getOtlpProtocol(dataType: string): string {
     const DEFAULT_OTLP_PROTOCOL = 'http/protobuf';
