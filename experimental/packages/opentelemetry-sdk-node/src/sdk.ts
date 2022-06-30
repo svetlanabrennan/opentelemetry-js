@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { ContextManager, TextMapPropagator } from '@opentelemetry/api';
+import { ContextManager, TextMapPropagator, diag } from '@opentelemetry/api';
 import { metrics } from '@opentelemetry/api-metrics';
 import {
   InstrumentationOption,
@@ -36,6 +36,7 @@ import { getEnv } from '@opentelemetry/core';
 import { OTLPTraceExporter as OTLPProtoTraceExporter } from '@opentelemetry/exporter-trace-otlp-proto';
 import { OTLPTraceExporter as OTLPHttpTraceExporter} from '@opentelemetry/exporter-trace-otlp-http';
 import { OTLPTraceExporter as OTLPGrpcTraceExporter} from '@opentelemetry/exporter-trace-otlp-grpc';
+
 
 /** This class represents everything needed to register a fully configured OpenTelemetry Node.js SDK */
 export class NodeSDK {
@@ -95,8 +96,8 @@ export class NodeSDK {
     } else {
       let traceExportersList = this.retrieveListOfTraceExporters();
 
-      if (traceExportersList[0] === 'none') {
-        diag.warn('OTEL_TRACES_EXPORTER contains "none". SDK will not be initialized.');
+      if (traceExportersList[0] === 'none' || traceExportersList.length === 0) {
+        diag.warn('OTEL_TRACES_EXPORTER contains "none" or is empty. SDK will not be initialized.');
       } else {
         if (traceExportersList.length > 1 && traceExportersList.includes('none')) {
           diag.warn('OTEL_TRACES_EXPORTER contains "none" along with other exporters. Using default otlp exporter.');
@@ -107,7 +108,7 @@ export class NodeSDK {
           traceExportersList.map(exporterName => {
             return this.configureExporter(exporterName);
           });
-  
+
         this._spanProcessors = this.configureSpanProcessors(configuredExporters);
       }
     }
@@ -187,13 +188,14 @@ export class NodeSDK {
   // }
 
   public getOtlpProtocol(dataType: string): string {
+    const DEFAULT_OTLP_PROTOCOL = 'http/protobuf';
     switch (dataType) {
       case 'traces':
-        return getEnv().OTEL_EXPORTER_OTLP_TRACES_PROTOCOL;;
+        return getEnv().OTEL_EXPORTER_OTLP_TRACES_PROTOCOL || getEnv().OTEL_EXPORTER_OTLP_PROTOCOL || DEFAULT_OTLP_PROTOCOL;
       case 'metrics':
-        return getEnv().OTEL_EXPORTER_OTLP_METRICS_PROTOCOL;
+        return getEnv().OTEL_EXPORTER_OTLP_METRICS_PROTOCOL || getEnv().OTEL_EXPORTER_OTLP_PROTOCOL || DEFAULT_OTLP_PROTOCOL;
       default:
-        return getEnv().OTEL_EXPORTER_OTLP_PROTOCOL;
+        return getEnv().OTEL_EXPORTER_OTLP_PROTOCOL || DEFAULT_OTLP_PROTOCOL;
     }
   }
 
