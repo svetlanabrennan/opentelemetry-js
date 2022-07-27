@@ -36,6 +36,7 @@ import { getEnv } from '@opentelemetry/core';
 import { OTLPTraceExporter as OTLPProtoTraceExporter } from '@opentelemetry/exporter-trace-otlp-proto';
 import { OTLPTraceExporter as OTLPHttpTraceExporter} from '@opentelemetry/exporter-trace-otlp-http';
 import { OTLPTraceExporter as OTLPGrpcTraceExporter} from '@opentelemetry/exporter-trace-otlp-grpc';
+import { ZipkinExporter } from '@opentelemetry/exporter-zipkin';
 
 
 /** This class represents everything needed to register a fully configured OpenTelemetry Node.js SDK */
@@ -94,23 +95,7 @@ export class NodeSDK {
       );
     // create trace exporter(s) from env
     } else {
-      let traceExportersList = this.retrieveListOfTraceExporters();
-
-      if (traceExportersList[0] === 'none' || traceExportersList.length === 0) {
-        diag.warn('OTEL_TRACES_EXPORTER contains "none" or is empty. SDK will not be initialized.');
-      } else {
-        if (traceExportersList.length > 1 && traceExportersList.includes('none')) {
-          diag.warn('OTEL_TRACES_EXPORTER contains "none" along with other exporters. Using default otlp exporter.');
-          traceExportersList = ['otlp'];
-        }
-
-        const configuredExporters: SpanExporter[] =
-          traceExportersList.map(exporterName => {
-            return this.configureExporter(exporterName);
-          });
-
-        this._spanProcessors = this.configureSpanProcessors(configuredExporters);
-      }
+      this.createTraceExportersFromEnv();
     }
 
     if (configuration.metricReader) {
@@ -124,6 +109,26 @@ export class NodeSDK {
     this._instrumentations = instrumentations;
   }
 
+  public createTraceExportersFromEnv() {
+    let traceExportersList = this.retrieveListOfTraceExporters();
+
+    if (traceExportersList[0] === 'none' || traceExportersList.length === 0) {
+      diag.warn('OTEL_TRACES_EXPORTER contains "none" or is empty. SDK will not be initialized.');
+    } else {
+      if (traceExportersList.length > 1 && traceExportersList.includes('none')) {
+        diag.warn('OTEL_TRACES_EXPORTER contains "none" along with other exporters. Using default otlp exporter.');
+        traceExportersList = ['otlp'];
+      }
+
+      const configuredExporters: SpanExporter[] =
+        traceExportersList.map(exporterName => {
+          return this.configureExporter(exporterName);
+        });
+
+      this._spanProcessors = this.configureSpanProcessors(configuredExporters);
+    }
+  }
+ 
   // visible for testing
   public configureSpanProcessors(exporters: SpanExporter[]): (BatchSpanProcessor | SimpleSpanProcessor)[] {
     return exporters.map(exporter => {
@@ -136,7 +141,6 @@ export class NodeSDK {
   }
 
   // visible for testing
-  // only handles trace exporters for now
   public retrieveListOfTraceExporters(): string[] {
     const traceList = getEnv().OTEL_TRACES_EXPORTER.split(',');
     const uniqueTraceExporters = Array.from(
@@ -153,10 +157,10 @@ export class NodeSDK {
 
   public configureExporter(name: string): SpanExporter {
     switch (name) {
+      case 'zipkin':
+        return this.configureZipkin();
       // case 'jaegar':
       //   return this.configureJaeger();
-      // case 'zipkin':
-      //   return this.configureZipkin();
       case 'console':
         return this.configureConsole();
       default:
@@ -175,13 +179,14 @@ export class NodeSDK {
       return new OTLPHttpTraceExporter();
     }
   }
+  public configureZipkin(): SpanExporter {
+    return new ZipkinExporter();
+  }
+
   // public configureJaeger(): SpanExporter {
 
   // }
 
-  // public configureZipkin(): SpanExporter {
-
-  // }
 
   public configureConsole(): SpanExporter {
     return new ConsoleSpanExporter();
@@ -263,13 +268,13 @@ export class NodeSDK {
         contextManager: this._tracerProviderConfig.contextManager,
         propagator: this._tracerProviderConfig.textMapPropagator,
       });
-    } else if(this._spanProcessors) {
+    } else if (this._spanProcessors) {
       const tracerProvider = new NodeTracerProvider();
 
       this._tracerProvider = tracerProvider;
 
       this._spanProcessors.forEach(processor => {
-        this._tracerProvider.addSpanProcessor(processor);
+        this._tracerProvider?.addSpanProcessor(processor);
       });
 
       tracerProvider.register();
@@ -294,6 +299,7 @@ export class NodeSDK {
 
   // for testing only
   public displayTracerProviders(): NodeTracerProvider | undefined {
+    console.log('providers are', this._tracerProvider?.activeSpanProcessor)
     return this._tracerProvider;
   }
 

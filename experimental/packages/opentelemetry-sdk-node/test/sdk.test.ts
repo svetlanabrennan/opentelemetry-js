@@ -47,6 +47,7 @@ import * as Sinon from 'sinon';
 import { NodeSDK } from '../src';
 import { env } from 'process';
 import { envDetector, processDetector } from '@opentelemetry/resources';
+import { ZipkinExporter } from '@opentelemetry/exporter-zipkin';
 
 const DefaultContextManager = semver.gte(process.version, '14.8.0')
   ? AsyncLocalStorageContextManager
@@ -463,7 +464,7 @@ describe('setup exporter from env', () => {
       assert(listOfProcessors.length === 1);
       assert(listOfProcessors[0] instanceof SimpleSpanProcessor);
       delete env.OTEL_TRACES_EXPORTER;
-    })
+    });
     it('ignores the protocol', () => {
       env.OTEL_TRACES_EXPORTER = 'console';
       env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL = 'grpc';
@@ -501,4 +502,50 @@ describe('setup exporter from env', () => {
       delete env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL;
     });
   });
+  describe('setup zipkin exporter from env', () => {
+    it('use the zipkin exporter', () => {
+      env.OTEL_TRACES_EXPORTER = 'zipkin';
+      new NodeSDK();
+      const listOfProcessors = spyConfigureSpanProcessors.returnValues[0];
+      const listOfExporters = spyConfigureSpanProcessors.args[0][0];
+
+      assert(spyExporterList.returned(['zipkin']));
+      assert(spyConfigureExporter.calledWith('zipkin'));
+      assert(listOfExporters.length === 1);
+      assert(listOfExporters[0] instanceof ZipkinExporter);
+      assert(listOfProcessors.length === 1);
+      assert(listOfProcessors[0] instanceof BatchSpanProcessor);
+      delete env.OTEL_TRACES_EXPORTER;
+    });
+    it('setup zipkin exporter and otlp exporter', () => {
+      env.OTEL_TRACES_EXPORTER = 'zipkin, otlp';
+      env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL = 'grpc';
+      new NodeSDK();
+      const listOfProcessors = spyConfigureSpanProcessors.returnValues[0];
+      const listOfExporters = spyConfigureSpanProcessors.args[0][0];
+
+      assert(spyExporterList.returned(['zipkin', 'otlp']));
+      assert(spyConfigureExporter.calledTwice);
+      assert(spyGetOtlpProtocol.returned('grpc'));
+      assert(listOfExporters.length === 2);
+      assert(listOfExporters[0] instanceof ZipkinExporter);
+      assert(listOfExporters[1] instanceof OTLPGrpcTraceExporter);
+      assert(listOfProcessors.length === 2);
+      assert(listOfProcessors[0] instanceof BatchSpanProcessor);
+      assert(listOfProcessors[1] instanceof BatchSpanProcessor);
+      delete env.OTEL_TRACES_EXPORTER;
+      delete env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL;
+    });
+  });
+  // describe('view trace providers', () => {
+  //   const spyDisplayTracerProviders = Sinon.spy(NodeSDK.prototype, 'displayTracerProviders');
+  //   it.only('should display trace providers', () => {
+  //     env.OTEL_TRACES_EXPORTER = 'console, otlp';
+  //     env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL = 'grpc';
+  //     let sdk = new NodeSDK();
+  //     sdk.start();
+  //     console.log(spyDisplayTracerProviders.returnValues)
+  //     assert(spyDisplayTracerProviders.called);
+  //   });
+  // });
 });
