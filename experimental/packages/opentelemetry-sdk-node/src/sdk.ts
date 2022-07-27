@@ -112,7 +112,7 @@ export class NodeSDK {
   public createTraceExportersFromEnv() {
     let traceExportersList = this.retrieveListOfTraceExporters();
 
-    if (traceExportersList[0] === 'none' || traceExportersList.length === 0) {
+    if (traceExportersList.length === 0 || traceExportersList[0] === 'none') {
       diag.warn('OTEL_TRACES_EXPORTER contains "none" or is empty. SDK will not be initialized.');
     } else {
       if (traceExportersList.length > 1 && traceExportersList.includes('none')) {
@@ -143,9 +143,7 @@ export class NodeSDK {
   // visible for testing
   public retrieveListOfTraceExporters(): string[] {
     const traceList = getEnv().OTEL_TRACES_EXPORTER.split(',');
-    const uniqueTraceExporters = Array.from(
-      new Set(traceList)
-    );
+    const uniqueTraceExporters =  Array.from(new Set(traceList));
 
     return this.filterBlanksAndNulls(uniqueTraceExporters);
   }
@@ -158,11 +156,11 @@ export class NodeSDK {
   public configureExporter(name: string): SpanExporter {
     switch (name) {
       case 'zipkin':
-        return this.configureZipkin();
+        return new ZipkinExporter();
       case 'jaeger':
-        return this.configureJaeger();
+        return new JaegerExporter();
       case 'console':
-        return this.configureConsole();
+        return new ConsoleSpanExporter();
       default:
         return this.configureOtlp();
     }
@@ -179,18 +177,8 @@ export class NodeSDK {
       return new OTLPHttpTraceExporter();
     }
   }
-  public configureZipkin(): SpanExporter {
-    return new ZipkinExporter();
-  }
 
-  public configureJaeger(): SpanExporter {
-    return new JaegerExporter();
-  }
-
-  public configureConsole(): SpanExporter {
-    return new ConsoleSpanExporter();
-  }
-
+  // todo: update retrieval of env using alternative to getEnv and add defaults back to environment.ts file
   public getOtlpProtocol(dataType: string): string {
     const DEFAULT_OTLP_PROTOCOL = 'http/protobuf';
     switch (dataType) {
