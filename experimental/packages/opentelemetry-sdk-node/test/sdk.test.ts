@@ -48,6 +48,7 @@ import { NodeSDK } from '../src';
 import { env } from 'process';
 import { envDetector, processDetector } from '@opentelemetry/resources';
 import { ZipkinExporter } from '@opentelemetry/exporter-zipkin';
+import { JaegerExporter } from '@opentelemetry/exporter-jaeger';
 
 const DefaultContextManager = semver.gte(process.version, '14.8.0')
   ? AsyncLocalStorageContextManager
@@ -530,6 +531,41 @@ describe('setup exporter from env', () => {
       assert(listOfExporters.length === 2);
       assert(listOfExporters[0] instanceof ZipkinExporter);
       assert(listOfExporters[1] instanceof OTLPGrpcTraceExporter);
+      assert(listOfProcessors.length === 2);
+      assert(listOfProcessors[0] instanceof BatchSpanProcessor);
+      assert(listOfProcessors[1] instanceof BatchSpanProcessor);
+      delete env.OTEL_TRACES_EXPORTER;
+      delete env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL;
+    });
+  });
+  describe('setup jaeger exporter from env', () => {
+    it('use the jaeger exporter', () => {
+      env.OTEL_TRACES_EXPORTER = 'jaeger';
+      new NodeSDK();
+      const listOfProcessors = spyConfigureSpanProcessors.returnValues[0];
+      const listOfExporters = spyConfigureSpanProcessors.args[0][0];
+
+      assert(spyExporterList.returned(['jaeger']));
+      assert(spyConfigureExporter.calledWith('jaeger'));
+      assert(listOfExporters.length === 1);
+      assert(listOfExporters[0] instanceof JaegerExporter);
+      assert(listOfProcessors.length === 1);
+      assert(listOfProcessors[0] instanceof BatchSpanProcessor);
+      delete env.OTEL_TRACES_EXPORTER;
+    });
+    it('setup jaeger exporter and otlp exporter', () => {
+      env.OTEL_TRACES_EXPORTER = 'jaeger, otlp';
+      env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL = 'http';
+      new NodeSDK().start();
+      const listOfProcessors = spyConfigureSpanProcessors.returnValues[0];
+      const listOfExporters = spyConfigureSpanProcessors.args[0][0];
+
+      assert(spyExporterList.returned(['jaeger', 'otlp']));
+      assert(spyConfigureExporter.calledTwice);
+      assert(spyGetOtlpProtocol.returned('http'));
+      assert(listOfExporters.length === 2);
+      assert(listOfExporters[0] instanceof JaegerExporter);
+      assert(listOfExporters[1] instanceof OTLPHttpTraceExporter);
       assert(listOfProcessors.length === 2);
       assert(listOfProcessors[0] instanceof BatchSpanProcessor);
       assert(listOfProcessors[1] instanceof BatchSpanProcessor);

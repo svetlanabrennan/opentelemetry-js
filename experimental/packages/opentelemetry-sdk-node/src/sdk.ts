@@ -37,7 +37,7 @@ import { OTLPTraceExporter as OTLPProtoTraceExporter } from '@opentelemetry/expo
 import { OTLPTraceExporter as OTLPHttpTraceExporter} from '@opentelemetry/exporter-trace-otlp-http';
 import { OTLPTraceExporter as OTLPGrpcTraceExporter} from '@opentelemetry/exporter-trace-otlp-grpc';
 import { ZipkinExporter } from '@opentelemetry/exporter-zipkin';
-
+import { JaegerExporter } from '@opentelemetry/exporter-jaeger';
 
 /** This class represents everything needed to register a fully configured OpenTelemetry Node.js SDK */
 export class NodeSDK {
@@ -159,8 +159,8 @@ export class NodeSDK {
     switch (name) {
       case 'zipkin':
         return this.configureZipkin();
-      // case 'jaegar':
-      //   return this.configureJaeger();
+      case 'jaeger':
+        return this.configureJaeger();
       case 'console':
         return this.configureConsole();
       default:
@@ -183,10 +183,9 @@ export class NodeSDK {
     return new ZipkinExporter();
   }
 
-  // public configureJaeger(): SpanExporter {
-
-  // }
-
+  public configureJaeger(): SpanExporter {
+    return new JaegerExporter();
+  }
 
   public configureConsole(): SpanExporter {
     return new ConsoleSpanExporter();
