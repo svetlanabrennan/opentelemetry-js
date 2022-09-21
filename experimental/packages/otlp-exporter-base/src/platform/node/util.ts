@@ -56,8 +56,8 @@ export function sendWithHttp<ExportItem, ServiceRequest>(
     reqIsDestroyed = true;
     // req.abort() was deprecated since v14
     if (nodeVersion >= 14) {
-      // req.destroy();
-      req.abort();
+      req.destroy();
+      // req.abort();
     } else {
       req.abort();
     }
@@ -79,6 +79,7 @@ export function sendWithHttp<ExportItem, ServiceRequest>(
 
   const sendWithRetry = (retries = DEFAULT_MAX_ATTEMPTS, backoffMillis = DEFAULT_INITIAL_BACKOFF) => {
     req = request(options, (res: http.IncomingMessage) => {
+      console.log('res status is -----', res.statusCode)
       let responseData = '';
       res.on('data', chunk => (responseData += chunk));
 
@@ -100,6 +101,7 @@ export function sendWithHttp<ExportItem, ServiceRequest>(
             clearTimeout(exporterTimer);
             clearTimeout(retryTimer);
           } else if (res.statusCode && isRetryable(res.statusCode) && retries > 0) {
+            console.log('about to retry')
             retryTimer = setTimeout(() => {
               sendWithRetry(retries - 1, backoffMillis * DEFAULT_BACKOFF_MULTIPLIER);
             }, backoffMillis);
